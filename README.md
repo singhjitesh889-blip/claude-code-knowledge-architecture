@@ -129,6 +129,76 @@ your AI partner smarter.
 
 ---
 
+## Where This Fits in the Stack
+
+Strip away the branding from any agent system and you find four engineering layers,
+each at a different distance from the model. This repo covers **Layer 2 — Context
+Engineering**: everything the model can see on a given turn.
+
+| Layer | Controls | Typical failure | This repo's role |
+|-------|----------|-----------------|-----------------|
+| L1 — Prompt | Wording, format, reasoning in one call | Output correct but unparseable; edge case missed | Out of scope — task instructions live in Skill files |
+| **L2 — Context** | Everything visible this turn: retrieved docs, memory, prior turns | Model contradicts itself; forgets something from 10 turns ago | **This repo — RAW → WIKI → STATE** |
+| L3 — Harness | Tools, retries, sub-agents, verifiers around each call | Model reasons correctly — deliverable missing, misnamed, never checked | [claude-code-hooks-kit](https://github.com/singhjitesh889-blip/claude-code-hooks-kit) |
+| L4 — Loop | The full run: scheduler, token cap, stop condition | Agent declares done while real test still fails; run spins forever | Cron-triggered pipelines with independent completion checks |
+
+The layers nest. A better context layer makes the harness more reliable. A better
+harness makes the loop safer to run unattended. L2 is the right place to start
+because it's the one that compounds over time.
+
+---
+
+### Why the harness is usually the real variable
+
+A frozen open-weight model once scored 0% on Harvey's Legal Agent Benchmark — not
+because of reasoning failure, but harness failure. The model understood the tasks.
+It failed because outputs landed in the wrong folder, with the wrong filename, or
+were never written at all. The 0% was measuring the harness's file-handling
+discipline, not the model's legal reasoning. No amount of RAW → WIKI → STATE
+architecture would have fixed it. The context was fine. The harness wasn't there.
+
+The fix was a proposer/keep-if-better loop: one new harness mechanism proposed per
+iteration, tested head-to-head, kept only if it wins. The biggest single gain was a
+filing clerk — an automatic step that reliably lands the deliverable at the exact
+expected path. It beat every prompt rewrite. It added zero extra model tokens. The
+same model, same tasks, same judge — score swung from 3.5% to 80.1% by swapping the
+harness. A related experiment across 12 real legal tasks moved average performance
+from 40.8% to 87.7% using the same loop: attempt → independent judge → harness edit
+→ rerun.
+
+One finding that changes how to diagnose failures: harness fixes transferred across
+models — the same harness lifted a separate smaller model 14 points — while prompt
+playbooks tuned for one model actively hurt a different model family. A benchmark
+score measures the model and its harness together. Until the harness is controlled
+for, it's impossible to know which one failed.
+
+---
+
+### Diagnosing failures: start with the harness
+
+When a run produces the wrong result, work outward from the model:
+
+1. **Harness first** — did the model do the job correctly but save, output, or format
+   it in the wrong place, with nobody checking? A missing verifier explains more
+   failures than poor reasoning. Second repeat failure of the same kind → hard-code a
+   deterministic check; don't re-prompt and hope.
+
+2. **Context next** — did the model have the right reference material visible when it
+   needed it? A stale STATE file, a missing WIKI entry, or a context window that
+   evicted the relevant file is the second-most-common failure class. The RAW →
+   WIKI → STATE architecture is the fix for this.
+
+3. **Loop next** — if this runs unattended, does something independent of the agent
+   confirm it finished correctly? The completion check has to open the file, not ask
+   whether it was opened.
+
+4. **Prompt last** — only once the above are ruled out is this a wording or reasoning
+   problem. Prompt rewrites are the most expensive fix and the least transferable.
+
+The ordering matters because most people go straight to step 4.
+
+---
+
 ## Related
 
 - **[claude-code-hooks-kit](https://github.com/singhjitesh889-blip/claude-code-hooks-kit)** — the automation layer that makes this architecture run without manual effort. Start here after reading ARCHITECTURE.md.
