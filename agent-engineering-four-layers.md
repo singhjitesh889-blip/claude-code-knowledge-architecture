@@ -145,6 +145,32 @@ tightly coupled — a long-running loop is only as good as its ongoing context h
 **Claude Code equivalent:** a completion check separate from the agent — actually
 opening the file, not trusting its summary.
 
+### The decision: what are you handing off?
+
+The right loop type is determined by where *you* are the bottleneck — not by task
+complexity:
+
+| Loop type | What you hand off | Best for | Stop mechanism |
+|-----------|-------------------|----------|----------------|
+| **Turn-based** | The check — you review each output, write the next prompt | Exploring, deciding, one-off tasks | Claude judges; you verify |
+| **Goal-based** | The stop condition | Tasks with a verifiable exit criterion | An evaluator model refuses early stops |
+| **Time-based** | The trigger | Recurring work, external systems | Work completes or you cancel |
+| **Proactive** | The whole prompt | Well-defined recurring streams | Each task exits on goal; routine runs until off |
+
+**The goal-based detail that changes how you think about stop conditions:** when the
+stop condition is handed to a *second, evaluator model* — not the same agent that
+produced the output — that evaluator actively refuses early stops. Every time the
+agent tries to declare done, the evaluator checks the criterion and sends it back to
+work if the check fails. This is materially different from the agent self-reporting
+completion. Deterministic criteria work best: number of tests passing, a score
+threshold, a file at an exact path — things that cannot be rationalized away.
+
+**Quality encoding:** when a loop produces a result that misses, the right response
+is not to fix that instance. Encode the fix into the system — write a Skill, add a
+stop-hook, extend the verification step — so the next run starts from a better
+baseline. This is how a loop gets smarter without more turns: the harness improves,
+not the retry count.
+
 ---
 
 ## Case Study A — "Don't Train the Model, Evolve the Harness"
